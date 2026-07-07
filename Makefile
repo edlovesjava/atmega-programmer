@@ -2,7 +2,10 @@
 # SHELL must be sh (not cmd.exe): recipes use POSIX shell syntax. Windows host runs make via Git Bash.
 SHELL  := /bin/sh
 PORT   ?= COM4
+BAUD   ?= 9600
 DRYRUN ?=
+
+.DEFAULT_GOAL := help
 
 include profiles.mk
 
@@ -57,4 +60,20 @@ blink: _require_chip
 	$(RUN) pio run -d firmware/$(BLINK_ENV) -e $(BLINK_ENV)
 	$(RUN) $(AVRDUDE) -U flash:w:$(BUILT_HEX):i
 
-.PHONY: _require_chip show id fuses flash isp bootloader blink
+# Serial monitor to a running target over a SEPARATE USB-TTL adapter (not the Nano).
+console:
+	$(RUN) pio device monitor -p $(PORT) -b $(BAUD)
+
+help:
+	@echo "ATmega ISP Programmer — targets (CHIP=328|328p|attiny85, PORT default COM4):"
+	@echo "  make isp                         flash ArduinoISP onto the Nano"
+	@echo "  make id        CHIP=328          read + report device signature"
+	@echo "  make fuses     CHIP=328          write the profile's fuse bytes"
+	@echo "  make bootloader CHIP=328         burn Optiboot"
+	@echo "  make blink     CHIP=328          build + flash the verification blink"
+	@echo "  make flash     CHIP=328 HEX=hex/foo.hex   flash an external hex"
+	@echo "  make console   PORT=COM7 BAUD=9600        serial monitor (separate USB-TTL)"
+	@echo "  make show      CHIP=328          print resolved profile"
+	@echo "  Append DRYRUN=1 to print the command instead of running it."
+
+.PHONY: _require_chip show id fuses flash isp bootloader blink console help
