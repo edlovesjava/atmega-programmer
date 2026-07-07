@@ -45,4 +45,11 @@ flash: _require_chip
 isp:
 	$(RUN) pio run -d firmware/arduinoisp -e programmer -t upload --upload-port $(PORT)
 
-.PHONY: _require_chip show id fuses flash isp
+# Burn Optiboot: set the boot-reset hfuse (0xDE), then flash the vendored image.
+# lfuse/efuse stay as the profile's 16 MHz-xtal values.
+bootloader: _require_chip
+	@if [ -z "$(BLOADER)" ]; then echo "ERROR: CHIP='$(CHIP)' has no bootloader in its profile." >&2; exit 1; fi
+	$(RUN) $(AVRDUDE) -e -U lfuse:w:$(LFUSE):m -U hfuse:w:0xDE:m -U efuse:w:$(EFUSE):m
+	$(RUN) $(AVRDUDE) -U flash:w:$(BLOADER):i -U lock:w:0x0F:m
+
+.PHONY: _require_chip show id fuses flash isp bootloader
