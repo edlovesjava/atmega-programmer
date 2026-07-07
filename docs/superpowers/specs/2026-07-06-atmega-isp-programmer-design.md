@@ -142,6 +142,8 @@ ATmega-Programmer/
 Under the hood every avrdude call is the same shape as `attiny-bare`:
 `avrdude -c stk500v1 -p <part> -P <PORT> -b 19200 -U ...`, with `<part>` and fuse bytes pulled from `profiles.mk`.
 
+**Port default:** the Nano's serial port is exposed as a `PORT=` variable defaulting to **`COM4`** (the current rig). Override per-invocation, e.g. `make id CHIP=328 PORT=COM7`.
+
 ## 7. Console Mode (TX/RX)
 
 The ArduinoISP sketch **occupies the Nano's USB serial** for the stk500v1 protocol, so the Nano cannot simultaneously be an ISP programmer and a serial console. Console mode therefore uses a **separate USB-TTL adapter** wired to the target's UART:
@@ -160,8 +162,8 @@ Profiles are data in `profiles.mk`. Fuse bytes below are the **no-bootloader, pr
 
 | `CHIP` | avrdude `-p` | Signature | Clock | Notes |
 |---|---|---|---|---|
-| `328p` | `m328p` | `0x1E950F` | 16 MHz xtal | primary raw-DIP rig |
-| `328`  | `m328`  | `0x1E9514` | 16 MHz xtal | non-P; distinct signature |
+| `328`  | `m328`  | `0x1E9514` | 16 MHz xtal | **primary raw-DIP rig (first target chip)**; non-P, distinct signature |
+| `328p` | `m328p` | `0x1E950F` | 16 MHz xtal | pin-compatible P variant |
 | `promini16` | `m328p` | `0x1E950F` | 16 MHz | 5V board via onboard ISP header |
 | `promini8`  | `m328p` | `0x1E950F` | 8 MHz | 3.3V board; **level caveat** (see below) |
 | `attiny85` | `attiny85` | `0x1E930B` | 8 MHz int | already documented in `attiny85_programmer` |
@@ -200,10 +202,12 @@ A **fresh 328P ships on the internal 8 MHz osc** (`lfuse 0x62`) — ISP still wo
 | V-8 | Console | `make console` shows target UART output over the separate USB-TTL. |
 | V-9 | ATtiny target | `make id/blink CHIP=attiny85` works, proving the profile system generalizes. |
 
-## 12. Open Questions / Risks
+## 12. Decisions & Remaining Risks
 
-- **COM port discovery:** the Nano's port varies (was COM39 for the attiny rig). Make it a `PORT=` variable with a sane default; consider auto-detect later.
-- **Non-P signature handling:** confirm avrdude cleanly distinguishes `m328` vs `m328p` without needing `-F`; document if a force flag is ever required.
-- **Pro Mini 3.3V level shifting:** decide the house approach (program at 5 V vs. add level shifting) before relying on `promini8`.
-- **ArduinoISP source:** vendor the sketch into the repo vs. reference the IDE example — vendoring makes the build self-contained; prefer that.
-- **Exact bootloader fuse bytes** per board variant: defer to MiniCore's `-t fuses` / `-t bootloader` rather than hand-maintaining bytes.
+Resolved 2026-07-06:
+
+- **COM port — RESOLVED.** `PORT=` variable defaulting to **`COM4`** (current rig); override per-invocation. Auto-detect deferred to a later stage.
+- **Non-P as first target — RESOLVED.** The **non-P ATmega328** (sig `0x1E9514`, part `m328`) is the primary first chip and gets the 16 MHz-xtal no-bootloader fuses (`lfuse 0xFF / hfuse 0xD9 / efuse 0xFD`). *Risk to watch:* confirm avrdude distinguishes `m328` vs `m328p` without `-F`; document if a force flag ever proves necessary.
+- **Pro Mini 3.3V — RESOLVED.** Program at **5 V** for now; no level shifting. `promini8` stays a documented profile but is not exercised until a level-shift approach is chosen.
+- **ArduinoISP source — RESOLVED.** **Vendor** the sketch into the repo (`firmware/arduinoisp/`) so the build is self-contained.
+- **Bootloader fuse bytes — RESOLVED (approach).** Defer to **MiniCore** (`-t fuses` / burn-bootloader) as the source of truth for bootloader+fuse combos; keep hand-maintained bytes only for the no-bootloader ISP baseline in §9. Exact per-variant bytes still to be captured from MiniCore when Stage 1 reaches V-7.
