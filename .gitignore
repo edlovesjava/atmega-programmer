@@ -1,0 +1,5 @@
+.pio/
+.vscode/
+*.bin
+# NOTE: `.pio/` (no leading slash) matches the per-firmware build dirs at any depth.
+# Do NOT ignore hex/ or bootloaders/ — those hold vendored/dropped images we keep.
