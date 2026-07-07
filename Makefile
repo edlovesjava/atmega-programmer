@@ -52,4 +52,9 @@ bootloader: _require_chip
 	$(RUN) $(AVRDUDE) -e -U lfuse:w:$(LFUSE):m -U hfuse:w:0xDE:m -U efuse:w:$(EFUSE):m
 	$(RUN) $(AVRDUDE) -U flash:w:$(BLOADER):i -U lock:w:0x0F:m
 
-.PHONY: _require_chip show id fuses flash isp bootloader
+# Build the profile's blink firmware (its own PIO project), then flash the built hex via avrdude.
+blink: _require_chip
+	$(RUN) pio run -d firmware/$(BLINK_ENV) -e $(BLINK_ENV)
+	$(RUN) $(AVRDUDE) -U flash:w:$(BUILT_HEX):i
+
+.PHONY: _require_chip show id fuses flash isp bootloader blink
