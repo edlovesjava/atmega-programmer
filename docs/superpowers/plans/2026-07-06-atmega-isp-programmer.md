@@ -19,6 +19,7 @@
 - **Bootloader fuse/hex combos defer to MiniCore/Optiboot artifacts**; hand-maintained fuse bytes exist only for the no-bootloader ISP baseline. (spec §9, §12 decision 5)
 - **Adding a new ISP AVR is a data change** (`profiles.mk` entry + optional blink env), never new build logic. (spec FR-9)
 - **Target firmwares are built by PlatformIO but flashed by the Makefile's avrdude wrapper** — one flash code path for all chips. (refinement of spec §6; see Task 5.)
+- **Host is Windows; `make` runs under Git Bash, not PowerShell/cmd.** The Makefile MUST set `SHELL := /bin/sh` as its first content line so GNU Make 3.81 runs recipes (which use `[ -z … ]`, `set -x`, `exit 1`) under sh, not cmd.exe. Verified working against Make 3.81 during pre-flight. All `make …` commands are run via the Bash (Git Bash) tool.
 
 ---
 
@@ -191,6 +192,8 @@ BUILT_HEX := .pio/build/$(BLINK_ENV)/firmware.hex
 
 ```make
 # Makefile — see docs/superpowers/plans for the full task breakdown.
+# SHELL must be sh (not cmd.exe): recipes use POSIX shell syntax. Windows host runs make via Git Bash.
+SHELL  := /bin/sh
 PORT   ?= COM4
 DRYRUN ?=
 
