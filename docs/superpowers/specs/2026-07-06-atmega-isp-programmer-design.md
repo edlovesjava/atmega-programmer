@@ -113,20 +113,28 @@ Stage 1 validates the whole flow on a **solderless breadboard** with the Nano pl
 
 ```
 ATmega-Programmer/
-  platformio.ini
   Makefile
   profiles.mk              # target profile data (avrdude part, clock, fuses, notes)
-  firmware/
+  firmware/                # one standalone PlatformIO PROJECT per firmware (see note)
     arduinoisp/            # ArduinoISP -> the Nano            (env: programmer)
-    blink328p/             # 16 MHz blink -> 328P/328 verify   (env: blink328p)
+      platformio.ini
+      src/ArduinoISP.ino
+    blink328/              # 16 MHz blink -> 328/328P verify   (env: blink328)
+      platformio.ini
+      src/main.cpp
     blink_attiny85/        # 8 MHz blink  -> ATtiny85 verify   (env: blink_attiny85)
+      platformio.ini
+      src/main.cpp
+  bootloaders/             # vendored Optiboot image(s) for `make bootloader`
   hex/                     # drop external .hex files here to flash
   docs/                    # this spec, wiring photos, fuse notes
 ```
 
+> **As-built note:** Each firmware is its **own** PlatformIO project (own `platformio.ini`, source under `src/`), built with `pio run -d firmware/<x>`. PlatformIO does not compile a `.ino` that lives in a subdirectory of a shared `src_dir`, and a shared `src_dir` would cross-compile every firmware's `setup()/loop()` together — per-project isolation avoids both and keeps the vendored ArduinoISP sketch verbatim.
+
 ### PlatformIO envs
-- **`programmer`** — `platform=atmelavr`, `board=nanoatmega328`, `framework=arduino`; source is the ArduinoISP sketch. `make isp` → `pio run -e programmer -t upload`.
-- **Verification envs** (`blink328p`, `blink_attiny85`, …) — built for the target MCU/clock and uploaded **through** the Nano via `upload_protocol = stk500v1`, `upload_speed = 19200`.
+- **`programmer`** — `platform=atmelavr`, `board=nanoatmega328`, `framework=arduino`; source is the vendored ArduinoISP sketch. `make isp` → `pio run -d firmware/arduinoisp -e programmer -t upload`.
+- **Verification envs** (`blink328`, `blink_attiny85`, …) — each **builds** for its target MCU/clock; the Makefile then **flashes the built `.hex` through the Nano with avrdude** (one avrdude flash path for all chips), rather than uploading from PlatformIO.
 
 ### Makefile operations (chip selected by `CHIP=`)
 | Command | Action |
