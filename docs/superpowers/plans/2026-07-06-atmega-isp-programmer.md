@@ -27,18 +27,20 @@
 
 ```
 ATmega-Programmer/
-  platformio.ini          # [platformio] src_dir=firmware; one env per firmware, build_src_filter isolates each
   Makefile                # PORT?=COM4; CHIP-driven targets; DRYRUN=1 echoes commands instead of running
   profiles.mk             # per-CHIP data: PART/SIG/LFUSE/HFUSE/EFUSE/FCPU/HEX/BLOADER — pure make vars
-  .gitignore              # .pio/, *.hex build outputs (but NOT vendored hex/)
+  .gitignore              # .pio/ (any depth), *.hex build outputs (but NOT vendored hex/)
   README.md               # quickstart + command table + wiring pointer to spec
-  firmware/
+  firmware/               # one self-contained PlatformIO PROJECT per firmware (see note)
     arduinoisp/
-      ArduinoISP.ino      # VENDORED from canonical source (env: programmer)
+      platformio.ini      # [env:programmer] board=nanoatmega328
+      src/ArduinoISP.ino  # VENDORED from canonical source, verbatim
     blink328/
-      main.cpp            # 16 MHz blink, LED on D13/PB5 (env: blink328 — serves 328 and 328p)
+      platformio.ini      # [env:blink328] ATmega328P, 16 MHz external
+      src/main.cpp        # 16 MHz blink, LED on D13/PB5 (serves 328 and 328p)
     blink_attiny85/
-      main.cpp            # 8 MHz blink, LED on PB0 (env: blink_attiny85)
+      platformio.ini      # [env:blink_attiny85] attiny85, 8 MHz internal
+      src/main.cpp        # 8 MHz blink, LED on PB0
   bootloaders/
     optiboot_atmega328.hex  # VENDORED Optiboot image for 328/328p @16MHz (for `make bootloader`)
   hex/
@@ -49,25 +51,26 @@ ATmega-Programmer/
 
 **Responsibilities:**
 - `profiles.mk` is the *only* place chip facts live. `Makefile` reads them; it contains no chip-specific literals.
-- `platformio.ini` only *builds*; it never uploads to a target (the Nano's own `programmer` env is the one exception — it uploads ArduinoISP to the Nano over USB).
-- Each `firmware/<x>/` folder is isolated by `build_src_filter` so envs don't cross-compile each other's sources.
+- **Each `firmware/<x>/` is its own standalone PlatformIO project** (own `platformio.ini`, own `src/`), built with `pio run -d firmware/<x> -e <env>`. This is a deliberate structural decision: PlatformIO does **not** compile `.ino` sketches that sit in a subdirectory of a shared `src_dir` (verified — "Nothing to build"), and a single shared `src_dir` would cross-compile every firmware's `setup()/loop()` together. Per-project isolation keeps the vendored `.ino` verbatim and each build clean. `.cpp` firmwares follow the same layout for uniformity.
+- PlatformIO only *builds* (produces `firmware.hex`); the Makefile's avrdude wrapper does every target flash. The one exception is `make isp`, which uses PlatformIO's own uploader to put ArduinoISP on the Nano over USB.
+- Build output lives at `firmware/<x>/.pio/build/<env>/firmware.hex`.
 
 ---
 
 ## Task 1: Repo scaffolding + ArduinoISP builds on the Nano
 
-Delivers FR-1 (buildable programmer firmware) and the project skeleton. A reviewer can reject this purely on "does `pio run -e programmer` compile."
+Delivers FR-1 (buildable programmer firmware) and the project skeleton. A reviewer can reject this purely on "does `pio run -d firmware/arduinoisp -e programmer` compile."
 
 **Files:**
-- Create: `platformio.ini`
 - Create: `.gitignore`
-- Create: `firmware/arduinoisp/ArduinoISP.ino` (vendored)
+- Create: `firmware/arduinoisp/platformio.ini`
+- Create: `firmware/arduinoisp/src/ArduinoISP.ino` (vendored)
 - Create: `hex/.gitkeep`
 - Create: `README.md` (skeleton — expanded in Task 7)
 
 **Interfaces:**
 - Consumes: nothing (first task).
-- Produces: PlatformIO env **`programmer`** (`board = nanoatmega328`) whose build output the Makefile's `isp` target will upload. `src_dir = firmware` convention that all later envs extend.
+- Produces: standalone PlatformIO project at `firmware/arduinoisp/` with env **`programmer`** (`board = nanoatmega328`), built via `pio run -d firmware/arduinoisp -e programmer`. Establishes the **one-project-per-firmware** convention Task 5 reuses. Build output: `firmware/arduinoisp/.pio/build/programmer/firmware.hex`.
 
 - [ ] **Step 1: Create `.gitignore`**
 
@@ -75,33 +78,34 @@ Delivers FR-1 (buildable programmer firmware) and the project skeleton. A review
 .pio/
 .vscode/
 *.bin
-# NOTE: do NOT ignore hex/ or bootloaders/ — those hold vendored/dropped images we keep.
+# NOTE: `.pio/` (no leading slash) matches the per-firmware build dirs at any depth.
+# Do NOT ignore hex/ or bootloaders/ — those hold vendored/dropped images we keep.
 ```
 
 - [ ] **Step 2: Vendor the ArduinoISP sketch (do not hand-type it)**
 
-Fetch the canonical ArduinoISP example and save it verbatim to `firmware/arduinoisp/ArduinoISP.ino`. Canonical source (either is fine, they match):
-- Arduino IDE: *File → Examples → 11.ArduinoISP → ArduinoISP*
-- Web: `https://raw.githubusercontent.com/arduino/arduino-examples/main/examples/11.ArduinoISP/ArduinoISP/ArduinoISP.ino`
+Create `firmware/arduinoisp/src/` and fetch the canonical ArduinoISP example verbatim into it. Use curl in Git Bash (verified reachable, HTTP 200, ~17.8 KB):
 
-Save it exactly. This is a vendoring step — transcribing it by hand is a plan failure (the sketch is ~700 lines; errors would be silent). Its default pin map already matches spec §5 (SCK=D13, MISO=D12, MOSI=D11, RESET=D10, heartbeat=D9, error=D8, prog=D7).
+```bash
+mkdir -p firmware/arduinoisp/src
+curl -fsSL -o firmware/arduinoisp/src/ArduinoISP.ino \
+  "https://raw.githubusercontent.com/arduino/arduino-examples/main/examples/11.ArduinoISP/ArduinoISP/ArduinoISP.ino"
+```
 
-- [ ] **Step 3: Write `platformio.ini` with the `programmer` env**
+This is a vendoring step — transcribing it by hand is a plan failure (the sketch is ~738 lines; errors would be silent). Sanity-check afterward: the file is ~738 lines and contains `void loop`. Its default pin map already matches spec §5 (SCK=D13, MISO=D12, MOSI=D11, RESET=D10, heartbeat=D9, error=D8, prog=D7).
+
+- [ ] **Step 3: Write `firmware/arduinoisp/platformio.ini`**
 
 ```ini
-[platformio]
-src_dir = firmware
-
-[env]
+; ArduinoISP -> the Nano, uploaded over USB by `make isp`.
+; Standalone project so the vendored .ino compiles at its own src/ root
+; (PlatformIO will not build a .ino under a shared/multi-firmware src_dir).
+[env:programmer]
 platform = atmelavr
 framework = arduino
-
-; --- Programmer: ArduinoISP onto the Nano, uploaded over USB ---
-[env:programmer]
 board = nanoatmega328
-build_src_filter = +<arduinoisp/>
 upload_protocol = arduino
-; upload_port is passed by the Makefile: pio run -e programmer -t upload --upload-port $(PORT)
+; upload port is passed by the Makefile: pio run -d firmware/arduinoisp -e programmer -t upload --upload-port $(PORT)
 ```
 
 - [ ] **Step 4: Write a skeleton `README.md`**
@@ -119,14 +123,14 @@ Quickstart and the full command table are filled in during Task 7.
 
 - [ ] **Step 6: Build the programmer firmware (the test)**
 
-Run: `pio run -e programmer`
-Expected: `SUCCESS` — ArduinoISP compiles for `nanoatmega328`. This proves the vendored sketch + env are correct.
+Run (via Git Bash): `pio run -d firmware/arduinoisp -e programmer`
+Expected: `[SUCCESS]` — ArduinoISP compiles for `nanoatmega328`, and `firmware/arduinoisp/.pio/build/programmer/firmware.hex` exists. This proves the vendored sketch + project are correct. (First run may auto-download the atmelavr toolchain; that's expected.)
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add platformio.ini .gitignore firmware/arduinoisp/ArduinoISP.ino hex/.gitkeep README.md
-git commit -m "feat: scaffold repo; ArduinoISP builds for the Nano (programmer env)"
+git add .gitignore firmware/arduinoisp/platformio.ini firmware/arduinoisp/src/ArduinoISP.ino hex/.gitkeep README.md
+git commit -m "feat: scaffold repo; ArduinoISP builds for the Nano (programmer project)"
 ```
 
 ---
@@ -185,7 +189,8 @@ endif
 # promini16 / promini8 are documented in the spec (§8) but intentionally not
 # defined as build targets this stage (program-at-5V only, no exercised rig).
 
-BUILT_HEX := .pio/build/$(BLINK_ENV)/firmware.hex
+# Each firmware is its own PlatformIO project; its hex lands under that project's .pio/.
+BUILT_HEX := firmware/$(BLINK_ENV)/.pio/build/$(BLINK_ENV)/firmware.hex
 ```
 
 - [ ] **Step 2: Write the minimal `Makefile` (profiles + guard + show)**
@@ -222,7 +227,7 @@ Expected (exact):
 ```
 CHIP=328 PART=m328 SIG=0x1E9514
 FUSES  lfuse=0xFF hfuse=0xD9 efuse=0xFD  FCPU=16000000L
-BLINK_ENV=blink328  BUILT_HEX=.pio/build/blink328/firmware.hex  BLOADER=bootloaders/optiboot_atmega328.hex
+BLINK_ENV=blink328  BUILT_HEX=firmware/blink328/.pio/build/blink328/firmware.hex  BLOADER=bootloaders/optiboot_atmega328.hex
 PORT=COM4
 ```
 
@@ -295,9 +300,9 @@ flash: _require_chip
 	@if [ -z "$(HEX)" ]; then echo "ERROR: set HEX=path/to/file.hex" >&2; exit 1; fi
 	$(RUN) $(AVRDUDE) -U flash:w:$(HEX):i
 
-# Flash ArduinoISP onto the Nano itself (over USB, via PlatformIO).
+# Flash ArduinoISP onto the Nano itself (over USB, via PlatformIO's uploader).
 isp:
-	$(RUN) pio run -e programmer -t upload --upload-port $(PORT)
+	$(RUN) pio run -d firmware/arduinoisp -e programmer -t upload --upload-port $(PORT)
 
 .PHONY: id fuses flash isp
 ```
@@ -332,7 +337,7 @@ avrdude -c stk500v1 -p m328 -P COM4 -b 19200 -U flash:w:hex/foo.hex:i
 Run: `make isp DRYRUN=1`
 Expected (exact):
 ```
-pio run -e programmer -t upload --upload-port COM4
+pio run -d firmware/arduinoisp -e programmer -t upload --upload-port COM4
 ```
 
 - [ ] **Step 7: Commit**
@@ -410,21 +415,22 @@ git commit -m "feat: bootloader target burns vendored Optiboot with boot-reset f
 Delivers FR-5 (built-in verify firmware) and the V-5/V-9 firmware. Blink runs at a rate implied by the *actual* clock, so a correct-speed blink proves the fuses/crystal (spec §11 V-5). PIO builds the hex; the Makefile `blink` target flashes it via avrdude (the single flash code path).
 
 **Files:**
-- Create: `firmware/blink328/main.cpp`
-- Create: `firmware/blink_attiny85/main.cpp`
-- Modify: `platformio.ini` (add `blink328`, `blink_attiny85` envs)
+- Create: `firmware/blink328/platformio.ini`
+- Create: `firmware/blink328/src/main.cpp`
+- Create: `firmware/blink_attiny85/platformio.ini`
+- Create: `firmware/blink_attiny85/src/main.cpp`
 - Modify: `Makefile` (add `blink` target)
 
 **Interfaces:**
-- Consumes: `BLINK_ENV`, `BUILT_HEX`, `PART`, `PORT` from profiles; `AVRDUDE`/`RUN` from Task 3.
-- Produces: envs `blink328` / `blink_attiny85`; target `blink`.
+- Consumes: `BLINK_ENV`, `BUILT_HEX`, `PART`, `PORT` from profiles; `AVRDUDE`/`RUN` from Task 3. `BLINK_ENV` is `blink328` (for CHIP 328 and 328p) or `blink_attiny85`.
+- Produces: standalone projects `firmware/blink328/` and `firmware/blink_attiny85/` (each with an env named identically to its folder); Makefile target `blink`. Each builds to `firmware/<env>/.pio/build/<env>/firmware.hex` — matching `BUILT_HEX` from Task 2.
 
-- [ ] **Step 1: Write `firmware/blink328/main.cpp`**
+- [ ] **Step 1: Write `firmware/blink328/src/main.cpp`**
 
 ```cpp
 #include <Arduino.h>
 
-// LED_PIN is provided per-env via build_flags (D13/PB5 on the 328).
+// LED_PIN is provided via build_flags (D13/PB5 on the 328).
 #ifndef LED_PIN
 #define LED_PIN 13
 #endif
@@ -441,12 +447,26 @@ void loop() {
 }
 ```
 
-- [ ] **Step 2: Write `firmware/blink_attiny85/main.cpp`**
+- [ ] **Step 2: Write `firmware/blink328/platformio.ini`**
+
+Build-only project (no `upload_*`); the Makefile's avrdude wrapper flashes the output. `board = ATmega328P` is the MiniCore board id (verified building at 16 MHz external); the same hex runs on the non-P 328.
+
+```ini
+[env:blink328]
+platform = atmelavr
+framework = arduino
+board = ATmega328P
+board_build.f_cpu = 16000000L
+board_hardware.oscillator = external
+build_flags = -D LED_PIN=13
+```
+
+- [ ] **Step 3: Write `firmware/blink_attiny85/src/main.cpp`**
 
 ```cpp
 #include <Arduino.h>
 
-// LED_PIN provided per-env via build_flags (PB0 = physical pin 5 on the ATtiny85).
+// LED_PIN provided via build_flags (PB0 = physical pin 5 on the ATtiny85).
 #ifndef LED_PIN
 #define LED_PIN 0
 #endif
@@ -463,63 +483,54 @@ void loop() {
 }
 ```
 
-- [ ] **Step 3: Add the target envs to `platformio.ini`**
-
-These envs **build only** (no `upload_*`); the Makefile flashes their output.
+- [ ] **Step 4: Write `firmware/blink_attiny85/platformio.ini`**
 
 ```ini
-; --- Target verification firmwares (built here, flashed by the Makefile) ---
-[env:blink328]
-board = ATmega328P
-board_build.f_cpu = 16000000L
-board_hardware.oscillator = external
-build_src_filter = +<blink328/>
-build_flags = -D LED_PIN=13
-
 [env:blink_attiny85]
+platform = atmelavr
+framework = arduino
 board = attiny85
 board_build.f_cpu = 8000000L
-build_src_filter = +<blink_attiny85/>
 build_flags = -D LED_PIN=0
 ```
 
-- [ ] **Step 4: Confirm the board ids exist (guards against a wrong board name)**
+- [ ] **Step 5: Confirm the board ids exist (guards against a wrong board name)**
 
 Run: `pio boards ATmega328P` and `pio boards attiny85`
-Expected: each prints a matching board row. If `ATmega328P` is not found, install MiniCore board defs and use the exact id it reports; if `attiny85` is missing, the ATTinyCore/atmelavr id it reports.
+Expected: each prints a matching board row. If `ATmega328P` is not found, install MiniCore and use the exact id it reports; if `attiny85` is missing, use the ATTinyCore/atmelavr id it reports. (During pre-flight, `board = ATmega328P` at 16 MHz external built successfully.)
 
-- [ ] **Step 5: Test — both blink firmwares compile**
+- [ ] **Step 6: Test — both blink firmwares compile**
 
-Run: `pio run -e blink328`
-Expected: `SUCCESS`, and `.pio/build/blink328/firmware.hex` now exists.
+Run: `pio run -d firmware/blink328 -e blink328`
+Expected: `[SUCCESS]`, and `firmware/blink328/.pio/build/blink328/firmware.hex` exists. (First run may auto-download MiniCore + toolchain — expect ~1 min.)
 
-Run: `pio run -e blink_attiny85`
-Expected: `SUCCESS`, `.pio/build/blink_attiny85/firmware.hex` exists.
+Run: `pio run -d firmware/blink_attiny85 -e blink_attiny85`
+Expected: `[SUCCESS]`, `firmware/blink_attiny85/.pio/build/blink_attiny85/firmware.hex` exists.
 
-- [ ] **Step 6: Add the `blink` target to the Makefile**
+- [ ] **Step 7: Add the `blink` target to the Makefile**
 
 ```make
-# Build the profile's blink firmware via PIO, then flash the built hex via avrdude.
+# Build the profile's blink firmware (its own PIO project), then flash the built hex via avrdude.
 blink: _require_chip
-	$(RUN) pio run -e $(BLINK_ENV)
+	$(RUN) pio run -d firmware/$(BLINK_ENV) -e $(BLINK_ENV)
 	$(RUN) $(AVRDUDE) -U flash:w:$(BUILT_HEX):i
 
 .PHONY: blink
 ```
 
-- [ ] **Step 7: Test — `blink` dry-run for 328 emits build + flash**
+- [ ] **Step 8: Test — `blink` dry-run for 328 emits build + flash**
 
 Run: `make blink CHIP=328 DRYRUN=1`
 Expected (exact, two lines):
 ```
-pio run -e blink328
-avrdude -c stk500v1 -p m328 -P COM4 -b 19200 -U flash:w:.pio/build/blink328/firmware.hex:i
+pio run -d firmware/blink328 -e blink328
+avrdude -c stk500v1 -p m328 -P COM4 -b 19200 -U flash:w:firmware/blink328/.pio/build/blink328/firmware.hex:i
 ```
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add firmware/blink328/main.cpp firmware/blink_attiny85/main.cpp platformio.ini Makefile
+git add firmware/blink328 firmware/blink_attiny85 Makefile
 git commit -m "feat: blink verification firmwares + make blink (build via PIO, flash via avrdude)"
 ```
 
@@ -645,7 +656,8 @@ Then wire the 6 ISP lines Nano→target (spec §5) with the 10 µF cap on the Na
 
 ## Adding a new ISP chip
 Add a `CHIP` block to `profiles.mk` (part, signature, fuses, clock) and — if you want a
-blink verifier — a `firmware/blink<x>/` folder + a PlatformIO env. No Makefile changes.
+blink verifier — a `firmware/blink<x>/` project (its own `platformio.ini` + `src/main.cpp`,
+env named like the folder). No Makefile changes.
 
 ## Ports
 The Nano's COM port varies between machines/cables. Default is `COM4`; find yours with
@@ -696,4 +708,4 @@ git commit -m "test: Stage 1 hardware validation log (V-1..V-9)"
 
 - **Spec coverage:** FR-1 (Task 1 build + Task 3 `isp`), FR-2 (Task 3 `id`), FR-3 (Task 3 `fuses`), FR-4 (Task 4 `bootloader`), FR-5 (Task 3 `flash` + Task 5 `blink`), FR-6 (`CHIP=` throughout), FR-7 (Task 2 328 vs 328p data + V-3), FR-8 (Task 6 `console`), FR-9 (Task 2 data-only profiles + Task 5 add-a-chip path). §7 console, §8 profiles, §9 fuses, §11 → Task 8. All mapped.
 - **Type/name consistency:** `PART/SIG/LFUSE/HFUSE/EFUSE/FCPU/BLINK_ENV/BLOADER/BUILT_HEX` defined in Task 2 and consumed by identical names in Tasks 3–6. `AVRDUDE`/`RUN` defined Task 3, reused Tasks 4–6. Target names match between Makefile, `help`, and README.
-- **Known residual risks (carried from spec §12, verified during Task 8, not blockers):** avrdude `m328` vs `m328p` force-flag behavior (V-3); exact Optiboot hfuse/hex per board variant (Task 4 uses the §9 `0xDE` + vendored image, revisit against MiniCore at V-7); PlatformIO MiniCore/ATTinyCore board ids (guarded by Task 5 Step 4).
+- **Known residual risks (carried from spec §12, verified during Task 8, not blockers):** avrdude `m328` vs `m328p` force-flag behavior (V-3); exact Optiboot hfuse/hex per board variant (Task 4 uses the §9 `0xDE` + vendored image, revisit against MiniCore at V-7); PlatformIO MiniCore/ATTinyCore board ids (guarded by Task 5 Step 5).
