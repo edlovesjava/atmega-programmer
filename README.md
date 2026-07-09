@@ -67,7 +67,27 @@ crystal only when you want the chip to *run at 16 MHz*:
 - Order matters: **wire the crystal first, then set the fuses.** Setting the crystal fuse
   with no crystal present makes the chip unresponsive to ISP until you add one.
 
-*(ATtiny85 target wiring is in spec §5.)*
+### Target — ATtiny85 on a breadboard (DIP-8)
+
+Same six ISP signals, different pinout. The ATtiny85 runs on its **8 MHz internal
+oscillator** — no crystal, ever (its blink is built for 8 MHz, so timing is correct as-is).
+
+| Nano pin | ATtiny85 DIP pin |
+|---|---|
+| D10 (RESET) | 1 (/RESET) |
+| D11 (MOSI) | 5 (PB0) |
+| D12 (MISO) | 6 (PB1) |
+| D13 (SCK) | 7 (PB2) |
+| 5V | 8 (VCC) |
+| GND | 4 (GND) |
+
+Support parts on the breadboard:
+- **0.1 µF** decoupling: pin 8 ↔ 4.
+- **10 kΩ** pull-up: pin 1 (RESET) → **VCC**.
+- Chip orientation: the **notch/dot marks the pin-1 end**.
+
+The `make bootloader` target is intentionally refused for `attiny85` (no bootloader this stage);
+`make id` / `make blink` / `make fuses` / `make flash` all work with `CHIP=attiny85`.
 
 ## Everyday commands
 `CHIP` selects the target (`328` = non-P primary, `328p`, `attiny85`).
