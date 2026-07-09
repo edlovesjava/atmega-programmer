@@ -80,7 +80,7 @@ Stage 1 validates the whole flow on a **solderless breadboard** with the Nano pl
 ### Blocks
 1. **Programmer host — Arduino Nano.** Plugged into the breadboard via its header pins, powered/enumerated over USB. Runs ArduinoISP. A **10 µF cap between Nano RESET and GND** prevents the Nano from auto-resetting when the host opens the port.
 2. **Status LEDs** (ArduinoISP convention): **D9 = heartbeat** (alive), **D8 = error**, **D7 = programming/PMODE**. Each via a current-limiting resistor (~330 Ω–1 kΩ) to GND.
-3. **Target circuit.** For the raw ATmega328P: DIP-28 on the breadboard with **16 MHz crystal** across XTAL1/XTAL2 (pins 9/10) with **2× 22 pF** load caps, **0.1 µF** decoupling on VCC (pin 7) and AVCC (pin 20), and a **10 kΩ pull-up on RESET** (pin 1). Powered by the breadboard 5 V supply. Board targets (Pro Mini) bring their own support circuitry and just expose the ISP header.
+3. **Target circuit.** For the raw ATmega328/328P (pin-identical): DIP-28 on the breadboard with **0.1 µF** decoupling on VCC (pin 7) and AVCC (pin 20), and a **10 kΩ pull-up on RESET** (pin 1) to VCC. Powered by the breadboard 5 V supply. The **16 MHz crystal** across XTAL1/XTAL2 (pins 9/10) with **2× 22 pF** load caps is **optional and required only to *run* at 16 MHz** — ISP itself (read signature, fuses, flash) works on the chip's factory internal oscillator (8 MHz ÷ 8 = 1 MHz) with **no crystal**. Add the crystal, *then* `make fuses` to switch the clock to it (setting the crystal fuse with no crystal present makes the chip unresponsive to ISP). Board targets (Pro Mini) bring their own support circuitry and just expose the ISP header.
 4. **ISP jumpers.** Six jumpers carry the ISP signals from the Nano to the target (table below).
 5. **Console link (separate).** A USB-TTL adapter to the target's UART (D0/D1) for §7.
 
@@ -88,7 +88,7 @@ Stage 1 validates the whole flow on a **solderless breadboard** with the Nano pl
 
 ### ISP — Nano (programmer) → Target
 
-| Nano pin | Signal | ATmega328P DIP pin | ATtiny85 pin |
+| Nano pin | Signal | ATmega328/328P DIP pin | ATtiny85 pin |
 |---|---|---|---|
 | D13 | SCK  | 19 (PB5) | 7 (PB2) |
 | D12 | MISO | 18 (PB4) | 6 (PB1) |
@@ -97,7 +97,17 @@ Stage 1 validates the whole flow on a **solderless breadboard** with the Nano pl
 | 5V  | VCC | 7 (+ AVCC pin 20) | 8 |
 | GND | GND | 8 (+ 22) | 4 |
 
-**Required:** 10 µF cap between **Nano** RESET and GND. For board targets (Pro Mini) the same six signals go to the onboard 2×3 ISP header instead of chip pins.
+(328 and 328P are pin-identical — same wiring; only the signature / `CHIP=` differs.)
+
+### Target support components (328/328P breadboard)
+
+| Part | Placement | Purpose |
+|---|---|---|
+| 0.1 µF ×2 | pin 7 ↔ 8, and pin 20 ↔ 22 | decoupling |
+| 10 kΩ | pin 1 (RESET) → **VCC** | RESET pull-up |
+| 16 MHz crystal + 2×22 pF | pins 9 ↔ 10, caps to GND | **optional** — only to *run* at 16 MHz (see §4) |
+
+**The 10 µF cap between the *Nano's* RESET and GND** is required *while using the Nano as a programmer* (it blocks the port-open auto-reset that desyncs avrdude → `cannot obtain SW version`). **Remove it when running `make isp`** (flashing ArduinoISP onto the Nano needs the auto-reset). For board targets (Pro Mini) the same six signals go to the onboard 2×3 ISP header instead of chip pins.
 
 ### Status LEDs (on the Nano's programmer pins)
 
