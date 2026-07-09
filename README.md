@@ -106,10 +106,14 @@ The Nano's COM port varies between machines/cables. Default is `COM4`; find your
 
 **`make id` returns `00 00 00` or `FF FF FF` (no valid signature).** The programmer is fine
 (the handshake worked); the *target* isn't answering. In order of likelihood:
-1. **Breadboard contact — the #1 cause.** If the reading *changes* between tries, or the chip
-   reads only when you *press* on it, it's contact. Reseat firmly, move to fresh rows, or use a
-   machined-pin / ZIF socket. `FF FF FF` = MISO floating (open/loose connection); `00 00 00` =
-   MISO pulled to ground (often the D12/MISO jumper sitting one hole into a ground rail).
+1. **Chip seating / breadboard contact — the #1 cause, by far.** Reseat the chip firmly (a
+   cheap breadboard may not grip the legs — press it fully home), move to fresh rows, or use a
+   machined-pin / ZIF socket. A reading that *changes* between tries, or appears only when you
+   *press* on the chip, is the obvious tell — but a **steady** `00`/`FF` across several chips can
+   *also* be pure seating, so don't assume it's a wiring short. (In this project's bring-up, a
+   rock-steady `00 00 00` on every chip turned out to be a poorly-seated chip in a low-quality
+   breadboard — reseating fixed it, no wiring change.) Electrically, `FF FF FF` = MISO floating
+   high (open), `00 00 00` = MISO held low — but both usually trace back to contact, not a short.
 2. **Orientation / swapped pins** — notch to the pin-1 end; MOSI (pin 17) and MISO (pin 18) not crossed.
 3. **Power** — confirm ~5 V across pin 7 ↔ 8 (and 20 ↔ 22).
 4. It is **not** a missing bootloader or missing crystal — ISP needs neither to read a fresh chip.
