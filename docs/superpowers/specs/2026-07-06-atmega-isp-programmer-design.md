@@ -109,6 +109,58 @@ Stage 1 validates the whole flow on a **solderless breadboard** with the Nano pl
 
 **The 10 µF cap between the *Nano's* RESET and GND** is required *while using the Nano as a programmer* (it blocks the port-open auto-reset that desyncs avrdude → `cannot obtain SW version`). **Remove it when running `make isp`** (flashing ArduinoISP onto the Nano needs the auto-reset). For board targets (Pro Mini) the same six signals go to the onboard 2×3 ISP header instead of chip pins.
 
+### Target — ATtiny85 (DIP-8)
+
+The ATtiny85 uses the six ISP signals from the table above (pin 1 RESET, 5 MOSI,
+6 MISO, 7 SCK, 8 VCC, 4 GND). It runs on its **8 MHz internal oscillator** — no
+crystal, ever (the verify firmware is built for 8 MHz, so blink timing is real).
+
+```
+        ATtiny85 (DIP-8), notch/dot = pin-1 end
+
+  D10 RESET ── PB5 │1 •   8│ VCC ── 5V
+      (unused) PB3 │2     7│ PB2 ── SCK  (D13)
+   verify LED  PB4 │3     6│ PB1 ── MISO (D12) / Serial RX
+          GND  GND │4     5│ PB0 ── MOSI (D11) / Serial TX
+                   └───────┘
+
+  Pins 5/6/7 do double duty: MOSI/MISO/SCK during ISP,
+  Serial TX/RX during the serial mode below.
+```
+
+| Part | Placement | Purpose |
+|---|---|---|
+| 0.1 µF | pin 8 ↔ 4 | decoupling |
+| 10 kΩ | pin 1 (RESET) → **VCC** | RESET pull-up |
+| Verify LED + ~330 Ω–1 kΩ | **pin 3 (PB4)** → LED → resistor → GND | `make blink` indicator |
+
+The verify LED is on **PB4 (pin 3)**, not the MOSI pin, because the firmware's
+software-serial **TX is fixed to PB0 (pin 5)** — see below.
+
+### Serial monitor — Nano as pass-through (ATtiny85)
+
+The ATtiny85 has **no hardware UART**. The Arduino core provides `Serial` via a
+bit-banged `TinySoftwareSerial` on **fixed** pins — **TX = PB0 (pin 5)**,
+**RX = PB1 (pin 6)** — at **9600 baud** (the most forgiving rate for the internal
+RC oscillator). This is a **separate mode from ISP**: flash over the ISP rig first,
+then rewire. Rather than a separate USB-TTL adapter, the Nano itself becomes the
+bridge — hold its ATmega328 in reset so the D0/D1 headers pass straight to the
+onboard CH340:
+
+| Connection | Purpose |
+|---|---|
+| Nano **RESET → GND** | holds the 328 in reset; D0/D1 become the CH340's lines |
+| ATtiny **pin 5 (PB0, TX) → Nano D1** | target → PC |
+| ATtiny **pin 6 (PB1, RX) → Nano D0** | PC → target |
+| Nano **5V → pin 8**, **GND → pin 4** | power + common ground |
+| *(remove the D10–D13 ISP wires)* | not used in serial mode |
+
+Then `make console` (defaults `PORT=COM4 BAUD=9600`). **Same-label wiring (TX→D1,
+RX→D0) is correct here** because, with the 328 held in reset, the D0/D1 headers
+*are* the CH340's lines — the inverse of normal crossover, since you tap behind the
+header labels. Garbled characters indicate 8 MHz-oscillator tolerance, not a wiring
+fault (OSCCAL tuning is the deeper fix).
+
 ### Status LEDs (on the Nano's programmer pins)
 
 | Nano pin | LED | Meaning |
