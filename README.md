@@ -85,9 +85,42 @@ Support parts on the breadboard:
 - **0.1 µF** decoupling: pin 8 ↔ 4.
 - **10 kΩ** pull-up: pin 1 (RESET) → **VCC**.
 - Chip orientation: the **notch/dot marks the pin-1 end**.
+- **Verify LED** (for `make blink`): physical **pin 3 (PB4)** → LED → ~330 Ω–1 kΩ → GND. (Pin 3 is used because the firmware's `Serial` TX is fixed to pin 5.)
 
 The `make bootloader` target is intentionally refused for `attiny85` (no bootloader this stage);
 `make id` / `make blink` / `make fuses` / `make flash` all work with `CHIP=attiny85`.
+
+### Serial monitor via the Nano (pass-through)
+
+The ATtiny85 has **no hardware UART** — the verify firmware bit-bangs serial
+(`TinySoftwareSerial`) at **9600 baud** on fixed pins: **TX = pin 5 (PB0)**,
+**RX = pin 6 (PB1)**. You can watch it without a separate USB-TTL adapter by
+turning the **Nano itself** into a USB-serial bridge: tie the Nano's **RESET → GND**
+to hold its ATmega328 in reset, which exposes the onboard CH340 straight through
+D0/D1.
+
+**This is a separate mode from ISP** — flash the firmware over the ISP rig first,
+then rewire:
+
+| Connection | Purpose |
+|---|---|
+| Nano **RESET → GND** | holds the 328 in reset; D0/D1 become the CH340's lines |
+| ATtiny **pin 5 (PB0, TX) → Nano D1** | target → PC |
+| ATtiny **pin 6 (PB1, RX) → Nano D0** | PC → target |
+| Nano **5V → pin 8**, **GND → pin 4** | power + common ground |
+| *(remove the D10–D13 ISP wires)* | not used in serial mode |
+
+Then: `make console` (defaults `PORT=COM4 BAUD=9600`). You should see `blink 1`,
+`blink 2`, … about once a second, and characters you type echo back.
+
+> **Same-label wiring is correct here (TX→D1/TX, RX→D0/RX).** With the 328 held in
+> reset, the D0/D1 headers *are* the CH340's lines, so connecting the target the
+> "straight" way reaches the USB chip — the inverse of normal crossover wiring,
+> because you're tapping behind the header labels.
+
+> **Garbled characters?** That's the 8 MHz internal oscillator's tolerance for
+> bit-banged serial, not a wiring fault. 9600 is the most forgiving rate; OSCCAL
+> tuning is the deeper fix if it persists.
 
 ## Everyday commands
 `CHIP` selects the target (`328` = non-P primary, `328p`, `attiny85`).
