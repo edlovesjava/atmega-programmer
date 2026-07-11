@@ -18,6 +18,12 @@ endif
 
 AVRDUDE := avrdude -c stk500v1 -p $(PART) -P $(PORT) -b 19200
 
+# Serial (bootloader) flash path: avrdude over Optiboot via a USB-TTL adapter.
+# Uses BLPART (the signature Optiboot reports), not PART (the silicon signature).
+BLBAUD ?= 115200
+SERIALDUDE := avrdude -c arduino -p $(BLPART) -P $(PORT) -b $(BLBAUD)
+J2U_HEX := firmware/jtag2updi/.pio/build/jtag2updi/firmware.hex
+
 # Guard: any chip-using target must have resolved a known CHIP.
 _require_chip:
 	@if [ -z "$(PART)" ]; then \
@@ -29,6 +35,7 @@ show: _require_chip
 	@echo "CHIP=$(CHIP) PART=$(PART) SIG=$(SIG)"
 	@echo "FUSES  lfuse=$(LFUSE) hfuse=$(HFUSE) efuse=$(EFUSE)  FCPU=$(FCPU)"
 	@echo "BLINK_ENV=$(BLINK_ENV)  BUILT_HEX=$(BUILT_HEX)  BLOADER=$(BLOADER)"
+	@echo "BLPART=$(BLPART)"
 	@echo "PORT=$(PORT)"
 
 # Read + report device signature.
@@ -43,6 +50,21 @@ fuses: _require_chip
 flash: _require_chip
 	@if [ -z "$(HEX)" ]; then echo "ERROR: set HEX=path/to/file.hex" >&2; exit 1; fi
 	$(RUN) $(AVRDUDE) -U flash:w:$(HEX):i
+
+# Flash an arbitrary hex over the target's Optiboot bootloader via a USB-TTL.
+# PORT here is the USB-TTL port (NOT the Nano's COM4). Boards without DTR/RTS
+# auto-reset need a manual RESET tap as avrdude starts.
+serialflash: _require_chip
+	@if [ -z "$(BLPART)" ]; then echo "ERROR: CHIP='$(CHIP)' has no bootloader/serial path." >&2; exit 1; fi
+	@if [ -z "$(HEX)" ]; then echo "ERROR: set HEX=path/to/file.hex" >&2; exit 1; fi
+	$(RUN) $(SERIALDUDE) -U flash:w:$(HEX):i
+
+# Build firmware/jtag2updi, then serial-flash it onto the 328 over Optiboot.
+# Parallels `make isp` (ArduinoISP onto the Nano). PORT is the USB-TTL port.
+jtag2updi: _require_chip
+	@if [ -z "$(BLPART)" ]; then echo "ERROR: CHIP='$(CHIP)' has no bootloader/serial path." >&2; exit 1; fi
+	$(RUN) pio run -d firmware/jtag2updi -e jtag2updi
+	$(RUN) $(SERIALDUDE) -U flash:w:$(J2U_HEX):i
 
 # Flash ArduinoISP onto the Nano itself (over USB, via PlatformIO's uploader).
 isp:
@@ -67,6 +89,8 @@ console:
 help:
 	@echo "ATmega ISP Programmer — targets (CHIP=328|328p|attiny85, PORT default COM4):"
 	@echo "  make isp                         flash ArduinoISP onto the Nano"
+	@echo "  make serialflash CHIP=328 HEX=x.hex PORT=COM16   flash a hex over Optiboot (USB-TTL port; manual RESET tap)"
+	@echo "  make jtag2updi CHIP=328 PORT=COM16               build + serial-flash jtag2updi onto the 328 (USB-TTL port; manual RESET tap)"
 	@echo "  make id        CHIP=328          read + report device signature"
 	@echo "  make fuses     CHIP=328          write the profile's fuse bytes"
 	@echo "  make bootloader CHIP=328         burn Optiboot"
@@ -76,4 +100,4 @@ help:
 	@echo "  make show      CHIP=328          print resolved profile"
 	@echo "  Append DRYRUN=1 to print the command instead of running it."
 
-.PHONY: _require_chip show id fuses flash isp bootloader blink console help
+.PHONY: _require_chip show id fuses flash isp bootloader blink console help serialflash jtag2updi

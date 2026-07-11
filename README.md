@@ -133,6 +133,8 @@ Then: `make console` (defaults `PORT=COM4 BAUD=9600`). You should see `blink 1`,
 | `make bootloader CHIP=328` | Burn Optiboot |
 | `make blink CHIP=328` | Build + flash the verification blink |
 | `make flash CHIP=328 HEX=hex/foo.hex` | Flash an external hex |
+| `make serialflash CHIP=328 HEX=hex/foo.hex PORT=COM16` | Flash a hex over Optiboot via a USB-TTL |
+| `make jtag2updi CHIP=328 PORT=COM16` | Build + serial-flash jtag2updi onto the 328 (makes a UPDI programmer) |
 | `make console PORT=COM7 BAUD=9600` | Serial monitor via a separate USB-TTL |
 | `make show CHIP=328` | Print the resolved profile |
 | `make help` | List all targets |
@@ -145,6 +147,13 @@ Then: `make console` (defaults `PORT=COM4 BAUD=9600`). You should see `blink 1`,
 > **`make bootloader` → serial uploads at 115200.** The vendored Optiboot runs its serial
 > bootloader at **115200 baud** (not the `9600` console default). Use `BAUD=115200` when
 > uploading a sketch to the target over serial after burning the bootloader.
+
+> **`serialflash` / `jtag2updi` use the USB-TTL port, not the Nano's `COM4`.** These
+> flash over the target's Optiboot bootloader through a separate USB-TTL adapter wired
+> to the 328. A CP2102 without DTR/RTS auto-reset needs a **manual RESET tap** on the
+> 328 as avrdude starts (Optiboot's ~1 s window). Both refuse `CHIP=attiny85` (no
+> bootloader path). `make jtag2updi` needs the 328 to already have Optiboot burned
+> (`make bootloader CHIP=328` over the Nano first).
 
 ## Adding a new ISP chip
 Add a `CHIP` block to `profiles.mk` (part, signature, fuses, clock) and — if you want a
