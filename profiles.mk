@@ -10,7 +10,8 @@ ifeq ($(CHIP),328)          # non-P ATmega328 — PRIMARY first target
   FCPU      := 16000000L
   BLINK_ENV := blink328
   BLOADER   := bootloaders/optiboot_atmega328.hex
-  BLPART    := m328p    # signature Optiboot reports over the bootloader (328P build)
+  # signature Optiboot reports over the bootloader (328P build)
+  BLPART    := m328p
 endif
 
 ifeq ($(CHIP),328p)         # ATmega328P
@@ -22,7 +23,8 @@ ifeq ($(CHIP),328p)         # ATmega328P
   FCPU      := 16000000L
   BLINK_ENV := blink328
   BLOADER   := bootloaders/optiboot_atmega328.hex
-  BLPART    := m328p    # signature Optiboot reports over the bootloader (328P build)
+  # signature Optiboot reports over the bootloader (328P build)
+  BLPART    := m328p
 endif
 
 ifeq ($(CHIP),attiny85)     # ATtiny85, 8 MHz internal
