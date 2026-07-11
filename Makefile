@@ -29,6 +29,7 @@ show: _require_chip
 	@echo "CHIP=$(CHIP) PART=$(PART) SIG=$(SIG)"
 	@echo "FUSES  lfuse=$(LFUSE) hfuse=$(HFUSE) efuse=$(EFUSE)  FCPU=$(FCPU)"
 	@echo "BLINK_ENV=$(BLINK_ENV)  BUILT_HEX=$(BUILT_HEX)  BLOADER=$(BLOADER)"
+	@echo "BLPART=$(BLPART)"
 	@echo "PORT=$(PORT)"
 
 # Read + report device signature.

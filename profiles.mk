@@ -10,6 +10,7 @@ ifeq ($(CHIP),328)          # non-P ATmega328 — PRIMARY first target
   FCPU      := 16000000L
   BLINK_ENV := blink328
   BLOADER   := bootloaders/optiboot_atmega328.hex
+  BLPART    := m328p    # signature Optiboot reports over the bootloader (328P build)
 endif
 
 ifeq ($(CHIP),328p)         # ATmega328P
@@ -21,6 +22,7 @@ ifeq ($(CHIP),328p)         # ATmega328P
   FCPU      := 16000000L
   BLINK_ENV := blink328
   BLOADER   := bootloaders/optiboot_atmega328.hex
+  BLPART    := m328p    # signature Optiboot reports over the bootloader (328P build)
 endif
 
 ifeq ($(CHIP),attiny85)     # ATtiny85, 8 MHz internal
@@ -32,6 +34,7 @@ ifeq ($(CHIP),attiny85)     # ATtiny85, 8 MHz internal
   FCPU      := 8000000L
   BLINK_ENV := blink_attiny85
   BLOADER   :=
+  BLPART    :=          # no bootloader/serial path this stage
 endif
 
 # promini16 / promini8 are documented in the spec (§8) but intentionally not
