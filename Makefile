@@ -18,6 +18,11 @@ endif
 
 AVRDUDE := avrdude -c stk500v1 -p $(PART) -P $(PORT) -b 19200
 
+# Serial (bootloader) flash path: avrdude over Optiboot via a USB-TTL adapter.
+# Uses BLPART (the signature Optiboot reports), not PART (the silicon signature).
+BLBAUD ?= 115200
+SERIALDUDE := avrdude -c arduino -p $(BLPART) -P $(PORT) -b $(BLBAUD)
+
 # Guard: any chip-using target must have resolved a known CHIP.
 _require_chip:
 	@if [ -z "$(PART)" ]; then \
@@ -44,6 +49,14 @@ fuses: _require_chip
 flash: _require_chip
 	@if [ -z "$(HEX)" ]; then echo "ERROR: set HEX=path/to/file.hex" >&2; exit 1; fi
 	$(RUN) $(AVRDUDE) -U flash:w:$(HEX):i
+
+# Flash an arbitrary hex over the target's Optiboot bootloader via a USB-TTL.
+# PORT here is the USB-TTL port (NOT the Nano's COM4). Boards without DTR/RTS
+# auto-reset need a manual RESET tap as avrdude starts.
+serialflash: _require_chip
+	@if [ -z "$(BLPART)" ]; then echo "ERROR: CHIP='$(CHIP)' has no bootloader/serial path." >&2; exit 1; fi
+	@if [ -z "$(HEX)" ]; then echo "ERROR: set HEX=path/to/file.hex" >&2; exit 1; fi
+	$(RUN) $(SERIALDUDE) -U flash:w:$(HEX):i
 
 # Flash ArduinoISP onto the Nano itself (over USB, via PlatformIO's uploader).
 isp:
@@ -77,4 +90,4 @@ help:
 	@echo "  make show      CHIP=328          print resolved profile"
 	@echo "  Append DRYRUN=1 to print the command instead of running it."
 
-.PHONY: _require_chip show id fuses flash isp bootloader blink console help
+.PHONY: _require_chip show id fuses flash isp bootloader blink console help serialflash
